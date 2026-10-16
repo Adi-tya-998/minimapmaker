@@ -1,0 +1,233 @@
+import { memo } from 'react';
+import { Circle, Image as KonvaImage, Line, Rect, Shape, Text } from 'react-konva';
+import { LABEL_FONT, HANDLE_PX, flatten, labelBox, rectPts } from '../../lib/geometry';
+import { containRect } from '../../lib/image';
+import { SHEET_SIZE, SURFACES } from '../../types/map';
+import type { Draft, LabelObject, MapObject, Point, SurfaceKind, XY } from '../../types/map';
+import type { Background } from '../../types/project';
+
+export const SELECTION_COLOR = '#0aa6b7';
+
+// ---------- document content (what ends up in the exported PNG) ----------
+
+function LabelNode({ s }: { s: LabelObject }) {
+  const b = labelBox(s);
+  const dark = s.tone === 'dark';
+  return (
+    <Text
+      x={b.x0}
+      y={b.y0}
+      width={b.x1 - b.x0}
+      height={b.y1 - b.y0}
+      text={s.text}
+      fontFamily={LABEL_FONT}
+      fontStyle="600"
+      fontSize={s.size}
+      align="center"
+      verticalAlign="middle"
+      wrap="none"
+      fill={dark ? '#1d1d1d' : '#ffffff'}
+      stroke={dark ? 'rgba(255,255,255,.75)' : 'rgba(30,30,30,.55)'}
+      strokeWidth={Math.max(1, s.size * 0.2)}
+      fillAfterStrokeEnabled
+      lineJoin="round"
+    />
+  );
+}
+
+interface ShapesProps {
+  shapes: MapObject[];
+  /** Bumped when web fonts finish loading so label boxes are measured again. */
+  fontTick: number;
+}
+
+export const SheetShapes = memo(function SheetShapes({ shapes }: ShapesProps) {
+  return (
+    <>
+      {shapes.map((s) => {
+        if (s.hidden) return null;
+        if (s.type === 'label') return <LabelNode key={s.id} s={s} />;
+        const fill = SURFACES[s.kind].fill;
+        if (s.type === 'line' || s.type === 'curve') return <Line key={s.id} points={flatten(s.pts)} stroke="#ffffff" strokeWidth={1.5} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />;
+        return (
+          <Line
+            key={s.id}
+            points={flatten(s.pts)}
+            closed
+            fill={fill}
+            stroke={fill}
+            strokeWidth={0.35}
+            lineJoin="miter"
+            perfectDrawEnabled={false}
+          />
+        );
+      })}
+    </>
+  );
+});
+
+export function BackgroundImage({ image, background }: { image: HTMLImageElement | null; background: Background | null }) {
+  if (!image || !background || !background.visible) return null;
+  const r = containRect(image.naturalWidth, image.naturalHeight, SHEET_SIZE);
+  return <KonvaImage image={image} x={r.x} y={r.y} width={r.width} height={r.height} opacity={background.opacity} />;
+}
+
+// ---------- editor-only layers ----------
+
+function GridPass({ values, stroke, strokeWidth }: { values: number[]; stroke: string; strokeWidth: number }) {
+  if (!values.length) return null;
+  return (
+    <Shape
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      sceneFunc={(ctx, shape) => {
+        ctx.beginPath();
+        for (const v of values) {
+          ctx.moveTo(v, 0);
+          ctx.lineTo(v, SHEET_SIZE);
+          ctx.moveTo(0, v);
+          ctx.lineTo(SHEET_SIZE, v);
+        }
+        ctx.strokeShape(shape);
+      }}
+    />
+  );
+}
+
+export function GridLines({ gridSize, scale }: { gridSize: number; scale: number }) {
+  const majorStep = gridSize >= 10 ? 50 : 10;
+  const minor: number[] = [];
+  const major: number[] = [];
+  for (let v = 0; v <= SHEET_SIZE + 0.001; v += gridSize) {
+    const m = v % majorStep;
+    if (Math.abs(m) < 0.001 || Math.abs(m - majorStep) < 0.001) major.push(v);
+    else if (gridSize * scale >= 5) minor.push(v); // hide minor lines when they would be too dense
+  }
+  return (
+    <>
+      <GridPass values={minor} stroke="rgba(0,0,0,.08)" strokeWidth={1 / scale} />
+      <GridPass values={major} stroke="rgba(0,0,0,.2)" strokeWidth={1 / scale} />
+    </>
+  );
+}
+
+function Outlined({ pts, closed, scale }: { pts: Point[]; closed: boolean; scale: number }) {
+  const points = flatten(pts);
+  return (
+    <>
+      <Line points={points} closed={closed} stroke="#ffffff" strokeWidth={3.5 / scale} lineJoin="round" />
+      <Line points={points} closed={closed} stroke={SELECTION_COLOR} strokeWidth={1.6 / scale} lineJoin="round" />
+    </>
+  );
+}
+
+function Handle({ p, scale }: { p: Point; scale: number }) {
+  const h = HANDLE_PX / scale;
+  return (
+    <Rect
+      x={p[0] - h / 2}
+      y={p[1] - h / 2}
+      width={h}
+      height={h}
+      fill="#ffffff"
+      stroke={SELECTION_COLOR}
+      strokeWidth={1.6 / scale}
+    />
+  );
+}
+
+function SelectionOutline({ shape, scale }: { shape: MapObject; scale: number }) {
+  if (shape.type === 'label') {
+    const b = labelBox(shape);
+    return <Outlined pts={rectPts(b.x0, b.y0, b.x1, b.y1)} closed scale={scale} />;
+  }
+  if (shape.type === 'line' || shape.type === 'curve') {
+    return (
+      <>
+        <Outlined pts={shape.pts} closed={false} scale={scale} />
+        {shape.pts.map((p, i) => <Handle key={i} p={p} scale={scale} />)}
+      </>
+    );
+  }
+  return (
+    <>
+      <Outlined pts={shape.pts} closed scale={scale} />
+      {shape.pts.map((p, i) => (
+        <Handle key={i} p={p} scale={scale} />
+      ))}
+    </>
+  );
+}
+
+function DraftPreview({
+  draft,
+  cursor,
+  rawCursor,
+  kind,
+  scale,
+}: {
+  draft: Draft;
+  cursor: XY | null;
+  rawCursor: XY | null;
+  kind: SurfaceKind;
+  scale: number;
+}) {
+  const fill = SURFACES[kind].fill;
+  if (draft.type === 'rect') {
+    const pts = rectPts(draft.a.x, draft.a.y, draft.b.x, draft.b.y);
+    return (
+      <>
+        <Line points={flatten(pts)} closed fill={fill} opacity={0.45} />
+        <Outlined pts={pts} closed scale={scale} />
+      </>
+    );
+  }
+  if (draft.type === 'line') {
+    const pts: Point[] = [[draft.a.x, draft.a.y], [cursor?.x ?? draft.b.x, cursor?.y ?? draft.b.y]];
+    return <Outlined pts={pts} closed={false} scale={scale} />;
+  }
+  if (draft.type === 'curve') {
+    const pts = cursor ? [...draft.pts, [cursor.x, cursor.y] as Point] : draft.pts;
+    return <Line points={flatten(pts)} stroke="#ffffff" strokeWidth={3.5 / scale} lineCap="round" lineJoin="round" tension={0.5} />;
+  }
+  const pts: Point[] = cursor ? [...draft.pts, [cursor.x, cursor.y]] : draft.pts;
+  const first = draft.pts[0];
+  const closing =
+    draft.pts.length >= 3 && rawCursor && Math.hypot(rawCursor.x - first[0], rawCursor.y - first[1]) * scale <= 9;
+  return (
+    <>
+      {pts.length >= 3 && <Line points={flatten(pts)} closed fill={fill} opacity={0.45} />}
+      <Outlined pts={pts} closed={false} scale={scale} />
+      {draft.pts.map((p, i) => (
+        <Handle key={i} p={p} scale={scale} />
+      ))}
+      {closing && <Circle x={first[0]} y={first[1]} radius={8 / scale} stroke={SELECTION_COLOR} strokeWidth={2 / scale} />}
+    </>
+  );
+}
+
+interface OverlayProps {
+  selected: MapObject | null;
+  draft: Draft | null;
+  cursor: XY | null;
+  rawCursor: XY | null;
+  crosshair: boolean;
+  kind: SurfaceKind;
+  scale: number;
+}
+
+export function EditorOverlay({ selected, draft, cursor, rawCursor, crosshair, kind, scale }: OverlayProps) {
+  const a = 6 / scale;
+  return (
+    <>
+      {selected && !selected.hidden && <SelectionOutline shape={selected} scale={scale} />}
+      {draft && <DraftPreview draft={draft} cursor={cursor} rawCursor={rawCursor} kind={kind} scale={scale} />}
+      {crosshair && cursor && (
+        <>
+          <Line points={[cursor.x - a, cursor.y, cursor.x + a, cursor.y]} stroke={SELECTION_COLOR} strokeWidth={1.4 / scale} />
+          <Line points={[cursor.x, cursor.y - a, cursor.x, cursor.y + a]} stroke={SELECTION_COLOR} strokeWidth={1.4 / scale} />
+        </>
+      )}
+    </>
+  );
+}
