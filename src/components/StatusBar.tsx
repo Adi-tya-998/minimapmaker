@@ -11,6 +11,8 @@ export function StatusBar() {
     coords = `x ${cursor.x.toFixed(1)}  y ${cursor.y.toFixed(1)}`;
     if (draft?.type === 'rect') {
       coords += `  ${Math.abs(draft.b.x - draft.a.x).toFixed(1)} × ${Math.abs(draft.b.y - draft.a.y).toFixed(1)}`;
+    } else if (draft?.type === 'circle') {
+      coords += `  Ø ${(Math.hypot(draft.edge.x - draft.center.x, draft.edge.y - draft.center.y) * 2).toFixed(1)} u`;
     } else if (draft?.type === 'line') {
       coords += `  ${Math.hypot(draft.b.x - draft.a.x, draft.b.y - draft.a.y).toFixed(1)} u`;
     } else if (draft?.type === 'curve') {

@@ -1,6 +1,6 @@
-import { memo } from 'react';
+import { Fragment, memo } from 'react';
 import { Circle, Image as KonvaImage, Line, Rect, Shape, Text } from 'react-konva';
-import { LABEL_FONT, HANDLE_PX, flatten, labelBox, rectPts } from '../../lib/geometry';
+import { LABEL_FONT, HANDLE_PX, circleRadius, flatten, labelBox, rectPts } from '../../lib/geometry';
 import { containRect } from '../../lib/image';
 import { SHEET_SIZE, SURFACES } from '../../types/map';
 import type { Draft, LabelObject, MapObject, Point, SurfaceKind, XY } from '../../types/map';
@@ -48,7 +48,18 @@ export const SheetShapes = memo(function SheetShapes({ shapes }: ShapesProps) {
         if (s.hidden) return null;
         if (s.type === 'label') return <LabelNode key={s.id} s={s} />;
         const fill = SURFACES[s.kind].fill;
-        if (s.type === 'line' || s.type === 'curve') return <Line key={s.id} points={flatten(s.pts)} stroke="#ffffff" strokeWidth={1.5} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />;
+        if (s.type === 'circle') {
+          return <Circle key={s.id} x={s.pts[0][0]} y={s.pts[0][1]} radius={circleRadius(s.pts)} fill={fill} stroke={fill} strokeWidth={0.35} perfectDrawEnabled={false} />;
+        }
+        if (s.type === 'line' || s.type === 'curve') {
+          const points = flatten(s.pts);
+          return (
+            <Fragment key={s.id}>
+              <Line points={points} stroke="rgba(25,35,38,.8)" strokeWidth={2.8} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />
+              <Line points={points} stroke="#ffffff" strokeWidth={1.5} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />
+            </Fragment>
+          );
+        }
         return (
           <Line
             key={s.id}
@@ -101,12 +112,12 @@ export function GridLines({ gridSize, scale }: { gridSize: number; scale: number
   for (let v = 0; v <= SHEET_SIZE + 0.001; v += gridSize) {
     const m = v % majorStep;
     if (Math.abs(m) < 0.001 || Math.abs(m - majorStep) < 0.001) major.push(v);
-    else if (gridSize * scale >= 5) minor.push(v); // hide minor lines when they would be too dense
+    else if (gridSize * scale >= 3) minor.push(v); // hide minor lines when they would be too dense
   }
   return (
     <>
-      <GridPass values={minor} stroke="rgba(0,0,0,.08)" strokeWidth={1 / scale} />
-      <GridPass values={major} stroke="rgba(0,0,0,.2)" strokeWidth={1 / scale} />
+      <GridPass values={minor} stroke="rgba(32,105,145,.24)" strokeWidth={1 / scale} />
+      <GridPass values={major} stroke="rgba(24,87,125,.48)" strokeWidth={1 / scale} />
     </>
   );
 }
@@ -140,6 +151,16 @@ function SelectionOutline({ shape, scale }: { shape: MapObject; scale: number })
   if (shape.type === 'label') {
     const b = labelBox(shape);
     return <Outlined pts={rectPts(b.x0, b.y0, b.x1, b.y1)} closed scale={scale} />;
+  }
+  if (shape.type === 'circle') {
+    const radius = circleRadius(shape.pts);
+    return (
+      <>
+        <Circle x={shape.pts[0][0]} y={shape.pts[0][1]} radius={radius} stroke="#ffffff" strokeWidth={3.5 / scale} />
+        <Circle x={shape.pts[0][0]} y={shape.pts[0][1]} radius={radius} stroke={SELECTION_COLOR} strokeWidth={1.6 / scale} />
+        <Handle p={shape.pts[1]} scale={scale} />
+      </>
+    );
   }
   if (shape.type === 'line' || shape.type === 'curve') {
     return (
@@ -182,12 +203,23 @@ function DraftPreview({
       </>
     );
   }
+  if (draft.type === 'circle') {
+    const radius = Math.hypot(draft.edge.x - draft.center.x, draft.edge.y - draft.center.y);
+    return (
+      <>
+        <Circle x={draft.center.x} y={draft.center.y} radius={radius} fill={fill} opacity={0.45} />
+        <Circle x={draft.center.x} y={draft.center.y} radius={radius} stroke="#ffffff" strokeWidth={3.5 / scale} />
+        <Circle x={draft.center.x} y={draft.center.y} radius={radius} stroke={SELECTION_COLOR} strokeWidth={1.6 / scale} />
+      </>
+    );
+  }
   if (draft.type === 'line') {
     const pts: Point[] = [[draft.a.x, draft.a.y], [cursor?.x ?? draft.b.x, cursor?.y ?? draft.b.y]];
     return <Outlined pts={pts} closed={false} scale={scale} />;
   }
   if (draft.type === 'curve') {
-    const pts = cursor ? [...draft.pts, [cursor.x, cursor.y] as Point] : draft.pts;
+    const previewCursor = rawCursor ?? cursor;
+    const pts = previewCursor ? [...draft.pts, [previewCursor.x, previewCursor.y] as Point] : draft.pts;
     return <Line points={flatten(pts)} stroke="#ffffff" strokeWidth={3.5 / scale} lineCap="round" lineJoin="round" tension={0.5} />;
   }
   const pts: Point[] = cursor ? [...draft.pts, [cursor.x, cursor.y]] : draft.pts;

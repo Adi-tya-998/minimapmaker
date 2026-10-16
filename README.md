@@ -17,17 +17,18 @@ npm run preview    # serve the production build
 
 | Action | How |
 | --- | --- |
-| Tools | `V` select, `P` polygon, `R` rectangle, `L` straight line, `C` curve, `T` label |
+| Tools | `V` select, `P` polygon, `R` rectangle, `O` circle, `L` straight line, `C` curve, `T` label |
 | Polygon | Click points; click the first point, double-click, or `Enter` to finish; `Backspace` removes the last point; `Esc` cancels |
+| Circle | Drag from the center to set the radius |
 | Line boundary | Drag between two points to draw a single straight white line |
-| Curve boundary | Drag to sketch a smooth white curve |
+| Curve boundary | Drag to sketch a smooth white curve; curves follow the pointer without grid snapping |
 | Edit | Drag a shape to move it; drag a handle to reshape or resize; double-click a polygon edge to add a point; `Shift`-click a point to remove it |
 | Nudge / order | Arrow keys (`Shift` = 5 units); `]` forward, `[` back; `Ctrl+D` duplicate; `Del` delete |
 | Snapping | Toggle Snap and pick a grid size in the top bar; hold `Alt` to ignore snapping |
 | Zoom / pan | Mouse wheel or the zoom buttons; pan with `Space`+drag or middle mouse button |
 | Undo / redo | `Ctrl+Z`, `Ctrl+Shift+Z` / `Ctrl+Y` (a whole drag or typing session is one step) |
 | Background | Properties panel → Import image (or drop an image on the sheet) |
-| Files | **Save map** downloads JSON; **Open** (or drop a `.json`) loads it; **Export PNG** has size options |
+| Files | **Save map** downloads JSON; **Open** (or drop a `.json`) loads it; **Export PNG** saves only map shapes on a transparent background |
 
 The project autosaves a moment after every change and is restored on reload.
 

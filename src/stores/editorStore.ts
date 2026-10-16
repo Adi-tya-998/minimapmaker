@@ -132,7 +132,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   kind: 'floor',
   grid: true,
   snap: true,
-  gridSize: 5,
+  gridSize: 2,
   altKey: false,
   spaceHeld: false,
   draft: null,

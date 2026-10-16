@@ -73,7 +73,20 @@ const filledSchema = z
     };
   });
 
-const shapeSchema = z.union([labelSchema, lineSchema, filledSchema]);
+const circleSchema = z.object({
+  type: z.literal('circle'),
+  kind,
+  pts: z.array(point).length(2),
+  hidden: z.boolean().optional(),
+}).transform((s): MapObject => ({
+  id: createId(),
+  type: 'circle',
+  kind: s.kind,
+  pts: s.pts as Point[],
+  hidden: s.hidden ? true : undefined,
+}));
+
+const shapeSchema = z.union([labelSchema, lineSchema, circleSchema, filledSchema]);
 
 const backgroundSchema = z.object({
   dataUrl: z

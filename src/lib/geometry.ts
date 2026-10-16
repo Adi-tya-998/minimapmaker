@@ -21,6 +21,10 @@ export function rectPts(x0: number, y0: number, x1: number, y1: number): Point[]
   ];
 }
 
+export function circleRadius(pts: Point[]): number {
+  return pts.length < 2 ? 0 : Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+}
+
 export interface SnapOptions {
   snap: boolean;
   /** Alt held: ignore snapping and round to 0.1 unit instead. */
@@ -78,6 +82,8 @@ export function hitTest(shapes: MapObject[], p: XY, scale = 1): MapObject | null
     if (s.type === 'label') {
       const b = labelBox(s);
       if (p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1) return s;
+    } else if (s.type === 'circle') {
+      if (Math.hypot(p.x - s.pts[0][0], p.y - s.pts[0][1]) <= circleRadius(s.pts) + HIT_PX / scale) return s;
     } else if (s.type === 'line' || s.type === 'curve') {
       for (let j = 0; j < s.pts.length - 1; j++) {
         if (segmentDistance(p, s.pts[j], s.pts[j + 1]).d * scale <= HIT_PX) return s;
@@ -90,6 +96,9 @@ export function hitTest(shapes: MapObject[], p: XY, scale = 1): MapObject | null
 }
 
 export function hitVertex(s: MapObject, p: XY, scale: number): number {
+  if (s.type === 'circle') {
+    return Math.hypot(p.x - s.pts[1][0], p.y - s.pts[1][1]) * scale <= HIT_PX ? 1 : -1;
+  }
   for (let i = 0; i < s.pts.length; i++) {
     if (Math.hypot(p.x - s.pts[i][0], p.y - s.pts[i][1]) * scale <= HIT_PX) return i;
   }
@@ -127,6 +136,10 @@ export function sizeOf(s: MapObject): { w: number; h: number } {
   if (s.type === 'label') {
     const b = labelBox(s);
     return { w: b.x1 - b.x0, h: b.y1 - b.y0 };
+  }
+  if (s.type === 'circle') {
+    const diameter = circleRadius(s.pts) * 2;
+    return { w: diameter, h: diameter };
   }
   const xs = s.pts.map((p) => p[0]);
   const ys = s.pts.map((p) => p[1]);

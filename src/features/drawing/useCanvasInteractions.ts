@@ -80,10 +80,13 @@ export function useCanvasInteractions(hostRef: RefObject<HTMLDivElement>): void 
         }
       } else if (s.tool === 'rect') {
         s.setDraft({ type: 'rect', a: sp, b: sp });
+      } else if (s.tool === 'circle') {
+        s.setDraft({ type: 'circle', center: sp, edge: sp });
       } else if (s.tool === 'line') {
         s.setDraft({ type: 'line', a: sp, b: sp });
       } else if (s.tool === 'curve') {
-        s.setDraft({ type: 'curve', pts: [[sp.x, sp.y]] });
+        // Curves follow the pointer directly; grid snapping creates visible stair steps.
+        s.setDraft({ type: 'curve', pts: [[p.x, p.y]] });
       } else if (s.tool === 'poly') {
         const d = s.draft;
         if (!d || d.type !== 'poly') {
@@ -144,12 +147,25 @@ export function useCanvasInteractions(hostRef: RefObject<HTMLDivElement>): void 
         );
       } else if (s.draft?.type === 'rect') {
         s.setDraft({ type: 'rect', a: s.draft.a, b: sp });
+      } else if (s.draft?.type === 'circle') {
+        s.setDraft({ type: 'circle', center: s.draft.center, edge: sp });
       } else if (s.draft?.type === 'line') {
         s.setDraft({ type: 'line', a: s.draft.a, b: sp });
       } else if (s.draft?.type === 'curve') {
         const last = s.draft.pts[s.draft.pts.length - 1];
-        if (Math.hypot(sp.x - last[0], sp.y - last[1]) * s.view.scale >= 3) {
-          s.setDraft({ type: 'curve', pts: [...s.draft.pts, [sp.x, sp.y]] });
+        const dx = p.x - last[0];
+        const dy = p.y - last[1];
+        const distancePx = Math.hypot(dx, dy) * s.view.scale;
+        // Interpolate pointer events to keep the spline smooth even when events arrive sparsely.
+        const stepPx = 2;
+        if (distancePx >= stepPx) {
+          const segments = Math.ceil(distancePx / stepPx);
+          const additions: Point[] = [];
+          for (let i = 1; i <= segments; i++) {
+            const t = i / segments;
+            additions.push([last[0] + dx * t, last[1] + dy * t]);
+          }
+          s.setDraft({ type: 'curve', pts: [...s.draft.pts, ...additions] });
         }
       }
 
@@ -169,6 +185,13 @@ export function useCanvasInteractions(hostRef: RefObject<HTMLDivElement>): void 
           s.addShape({ id: createId(), type: 'rect', kind: s.kind, pts: rectPts(a.x, a.y, b.x, b.y) });
         }
       }
+      if (s.draft?.type === 'circle') {
+        const { center, edge } = s.draft;
+        s.setDraft(null);
+        if (Math.hypot(edge.x - center.x, edge.y - center.y) >= 1) {
+          s.addShape({ id: createId(), type: 'circle', kind: s.kind, pts: [[center.x, center.y], [edge.x, edge.y]] });
+        }
+      }
       if (s.draft?.type === 'line') {
         const { a, b } = s.draft;
         s.setDraft(null);
@@ -177,7 +200,10 @@ export function useCanvasInteractions(hostRef: RefObject<HTMLDivElement>): void 
         }
       }
       if (s.draft?.type === 'curve') {
-        const pts = s.draft.pts;
+        const pts = s.draft.pts.slice();
+        const end = s.rawCursor;
+        const last = pts[pts.length - 1];
+        if (end && last && Math.hypot(end.x - last[0], end.y - last[1]) > 0.01) pts.push([end.x, end.y]);
         s.setDraft(null);
         if (pts.length >= 2) s.addShape({ id: createId(), type: 'curve', kind: s.kind, pts });
       }

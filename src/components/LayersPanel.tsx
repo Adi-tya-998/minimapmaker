@@ -8,7 +8,7 @@ export function layerNames(shapes: MapObject[]): string[] {
   const counts: Partial<Record<string, number>> = {};
   return shapes.map((s) => {
     if (s.type === 'label') return `“${s.text}”`;
-    const name = s.type === 'line' ? 'Line' : s.type === 'curve' ? 'Curve' : SURFACES[s.kind].name;
+    const name = s.type === 'line' ? 'Line' : s.type === 'curve' ? 'Curve' : s.type === 'circle' ? 'Circle' : SURFACES[s.kind].name;
     counts[name] = (counts[name] ?? 0) + 1;
     return `${name} ${counts[name]}`;
   });
@@ -57,7 +57,7 @@ export function LayersPanel() {
             </li>
           ))}
       </ul>
-      {shapes.length === 0 && <p className="muted">No shapes yet. Pick Polygon, Rectangle, or Line boundary and draw on the sheet.</p>}
+      {shapes.length === 0 && <p className="muted">No shapes yet. Pick a drawing tool and draw on the sheet.</p>}
     </section>
   );
 }

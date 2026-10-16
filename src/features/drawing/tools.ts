@@ -1,4 +1,4 @@
-import { Minus, MousePointer2, Pentagon, Spline, Square, Type } from 'lucide-react';
+import { Circle, Minus, MousePointer2, Pentagon, Spline, Square, Type } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Tool } from '../../types/map';
 
@@ -31,6 +31,13 @@ export const TOOLS: ToolDef[] = [
     key: 'R',
     icon: Square,
     hint: 'Drag to draw a rectangle. Hold Alt to ignore the grid.',
+  },
+  {
+    id: 'circle',
+    label: 'Circle',
+    key: 'O',
+    icon: Circle,
+    hint: 'Drag from the center to set the circle radius. Hold Alt to ignore the grid.',
   },
   {
     id: 'line',

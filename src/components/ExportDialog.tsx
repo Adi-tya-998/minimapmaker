@@ -14,9 +14,7 @@ interface Props {
 export function ExportDialog({ open, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [size, setSize] = useState(1080);
-  const [includeBackground, setIncludeBackground] = useState(true);
   const [busy, setBusy] = useState(false);
-  const hasBackground = useEditorStore((s) => !!s.doc.background);
 
   useEffect(() => {
     const d = ref.current;
@@ -29,7 +27,7 @@ export function ExportDialog({ open, onClose }: Props) {
     const { doc, showToast } = useEditorStore.getState();
     setBusy(true);
     try {
-      const blob = await renderPng(doc, size, includeBackground && hasBackground);
+      const blob = await renderPng(doc, size);
       downloadBlob(`${fileSlug(doc.name)}.png`, blob);
       showToast(`PNG exported at ${size} px.`);
       onClose();
@@ -43,7 +41,7 @@ export function ExportDialog({ open, onClose }: Props) {
   return (
     <dialog ref={ref} className="dlg" onClose={onClose} aria-labelledby="export-title">
       <h2 id="export-title">Export PNG</h2>
-      <p className="muted">Renders the finished map without the grid or selection handles.</p>
+      <p className="muted">Exports only your map shapes on a transparent background. Reference images, the grid, and selection handles are excluded.</p>
       <div className="field" style={{ marginTop: 12 }}>
         <label htmlFor="export-size">Image size</label>
         <select id="export-size" className="btn" value={size} onChange={(e) => setSize(Number(e.target.value))}>
@@ -54,12 +52,6 @@ export function ExportDialog({ open, onClose }: Props) {
           ))}
         </select>
       </div>
-      {hasBackground && (
-        <label className="check">
-          <input type="checkbox" checked={includeBackground} onChange={(e) => setIncludeBackground(e.target.checked)} />
-          Include background image
-        </label>
-      )}
       <div className="row dlg-actions">
         <button type="button" className="btn" onClick={onClose}>
           Cancel

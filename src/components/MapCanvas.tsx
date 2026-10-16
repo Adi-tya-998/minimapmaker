@@ -110,8 +110,8 @@ export function MapCanvas() {
           {/* Map content, clipped to the sheet like the exported PNG */}
           <Layer listening={false} clipX={0} clipY={0} clipWidth={SHEET_SIZE} clipHeight={SHEET_SIZE}>
             <BackgroundImage image={bgImage} background={doc.background} />
-            <SheetShapes shapes={doc.shapes} fontTick={fontTick} />
             {grid && <GridLines gridSize={gridSize} scale={scale} />}
+            <SheetShapes shapes={doc.shapes} fontTick={fontTick} />
           </Layer>
           <Layer listening={false}>
             <EditorOverlay

@@ -17,7 +17,7 @@ export const SURFACES: Record<SurfaceKind, { name: string; fill: string }> = {
 };
 export const SURFACE_KINDS = Object.keys(SURFACES) as SurfaceKind[];
 
-export type Tool = 'select' | 'poly' | 'rect' | 'line' | 'curve' | 'label';
+export type Tool = 'select' | 'poly' | 'rect' | 'circle' | 'line' | 'curve' | 'label';
 export type LabelTone = 'light' | 'dark';
 
 interface ObjectBase {
@@ -35,6 +35,10 @@ export interface RectObject extends ObjectBase {
   type: 'rect';
   kind: SurfaceKind;
 }
+export interface CircleObject extends ObjectBase {
+  type: 'circle';
+  kind: SurfaceKind;
+}
 export interface LineObject extends ObjectBase {
   type: 'line' | 'curve';
   kind: SurfaceKind;
@@ -46,13 +50,14 @@ export interface LabelObject extends ObjectBase {
   tone: LabelTone;
 }
 
-export type FilledObject = PolygonObject | RectObject;
+export type FilledObject = PolygonObject | RectObject | CircleObject;
 export type MapObject = FilledObject | LineObject | LabelObject;
 
 /** In-progress drawing, kept outside the document until it is committed. */
 export type Draft =
   | { type: 'poly'; pts: Point[] }
   | { type: 'rect'; a: XY; b: XY }
+  | { type: 'circle'; center: XY; edge: XY }
   | { type: 'line'; a: XY; b: XY }
   | { type: 'curve'; pts: Point[] };
 

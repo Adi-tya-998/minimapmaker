@@ -1,8 +1,7 @@
 import { SHEET_SIZE, SURFACES } from '../types/map';
 import type { LabelObject, MapObject } from '../types/map';
 import type { MapDocument } from '../types/project';
-import { LABEL_FONT } from './geometry';
-import { containRect, loadImage } from './image';
+import { circleRadius, LABEL_FONT } from './geometry';
 
 function tracePath(c: CanvasRenderingContext2D, pts: MapObject['pts']) {
   c.beginPath();
@@ -44,19 +43,8 @@ function paintLabel(c: CanvasRenderingContext2D, s: LabelObject) {
   c.restore();
 }
 
-/** Paint the finished map (no grid, no editor overlays) in map units onto a 2D context. */
-export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument, background: HTMLImageElement | null) {
-  c.fillStyle = '#ffffff';
-  c.fillRect(0, 0, SHEET_SIZE, SHEET_SIZE);
-
-  if (background && doc.background) {
-    const r = containRect(background.naturalWidth, background.naturalHeight, SHEET_SIZE);
-    c.save();
-    c.globalAlpha = doc.background.opacity;
-    c.drawImage(background, r.x, r.y, r.width, r.height);
-    c.restore();
-  }
-
+/** Paint only the created map (no sheet fill, reference image, grid, or editor overlays). */
+export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
   for (const s of doc.shapes) {
     if (s.hidden) continue;
     if (s.type === 'label') {
@@ -71,10 +59,25 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument, backgr
         c.moveTo(s.pts[0][0], s.pts[0][1]);
         c.lineTo(s.pts[1][0], s.pts[1][1]);
       }
+      c.strokeStyle = 'rgba(25,35,38,.8)';
+      c.lineWidth = 2.8;
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.stroke();
       c.strokeStyle = '#ffffff';
       c.lineWidth = 1.5;
       c.lineCap = 'round';
       c.lineJoin = 'round';
+      c.stroke();
+      continue;
+    }
+    if (s.type === 'circle') {
+      c.beginPath();
+      c.arc(s.pts[0][0], s.pts[0][1], circleRadius(s.pts), 0, Math.PI * 2);
+      c.fillStyle = fill;
+      c.fill();
+      c.strokeStyle = fill;
+      c.lineWidth = 0.35;
       c.stroke();
       continue;
     }
@@ -89,7 +92,7 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument, backgr
 }
 
 /** Render the map to a square PNG of `pixels` x `pixels`. */
-export async function renderPng(doc: MapDocument, pixels: number, includeBackground: boolean): Promise<Blob> {
+export async function renderPng(doc: MapDocument, pixels: number): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = pixels;
   canvas.height = pixels;
@@ -102,8 +105,7 @@ export async function renderPng(doc: MapDocument, pixels: number, includeBackgro
   } catch {
     /* fall back to the system sans-serif */
   }
-  const bg = includeBackground && doc.background ? await loadImage(doc.background.dataUrl) : null;
-  paintSheet(ctx, doc, bg);
+  paintSheet(ctx, doc);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not render the image.'))), 'image/png');
