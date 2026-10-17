@@ -2,7 +2,7 @@ import { Fragment, memo } from 'react';
 import { Circle, Image as KonvaImage, Line, Rect, Shape, Text } from 'react-konva';
 import { LABEL_FONT, HANDLE_PX, circleRadius, flatten, labelBox, rectPts } from '../../lib/geometry';
 import { containRect } from '../../lib/image';
-import { SHEET_SIZE, SURFACES } from '../../types/map';
+import { ERASER_WIDTH, SHEET_SIZE, SURFACES } from '../../types/map';
 import type { Draft, LabelObject, MapObject, Point, SurfaceKind, XY } from '../../types/map';
 import type { Background } from '../../types/project';
 
@@ -49,38 +49,51 @@ export const SheetShapes = memo(function SheetShapes({ shapes }: ShapesProps) {
         if (s.hidden) return null;
         if (s.type === 'label') return <LabelNode key={s.id} s={s} />;
         const fill = SURFACES[s.kind].fill;
-        const outlineColor = s.outline === 'white' ? '#ffffff' : s.outline === 'black' ? '#1d1d1d' : undefined;
+        const outlineFor = (index: number, fallback: 'none' | 'white' | 'black') => s.edgeOutlines?.[index] ?? s.outline ?? fallback;
         if (s.type === 'circle') {
-          return <Circle key={s.id} x={s.pts[0][0]} y={s.pts[0][1]} radius={circleRadius(s.pts)} fill={fill} stroke={outlineColor ?? (s.outline === 'none' ? undefined : fill)} strokeWidth={outlineColor ? 1.5 : s.outline === 'none' ? 0 : 0.35} perfectDrawEnabled={false} />;
+          const outline = outlineFor(0, 'none');
+          return <Fragment key={s.id}>
+            <Circle x={s.pts[0][0]} y={s.pts[0][1]} radius={circleRadius(s.pts)} fill={fill} stroke={outline === 'white' ? '#ffffff' : outline === 'black' ? '#1d1d1d' : (s.outline === undefined && s.edgeOutlines?.[0] === undefined ? fill : undefined)} strokeWidth={outline === 'white' || outline === 'black' ? 1.5 : outline === 'none' ? (s.outline === undefined && s.edgeOutlines?.[0] === undefined ? 0.35 : 0) : 0} perfectDrawEnabled={false} />
+            <SurfaceErasures erasures={s.erasures} kind={s.kind} />
+          </Fragment>;
         }
         if (s.type === 'line' || s.type === 'curve') {
           const points = flatten(s.pts);
-          if (s.outline === 'none') return <Line key={s.id} points={points} stroke="#ffffff" strokeWidth={1.5} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />;
-          if (s.outline === 'black') return <Line key={s.id} points={points} stroke="#1d1d1d" strokeWidth={1.8} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />;
-          if (s.outline === 'white') return <Fragment key={s.id}><Line points={points} stroke="rgba(25,35,38,.8)" strokeWidth={2.8} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} /><Line points={points} stroke="#ffffff" strokeWidth={1.5} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} /></Fragment>;
+          const outline = outlineFor(0, 'white');
+          if (outline === 'none') return <SurfaceErasures key={s.id} erasures={s.erasures} kind={s.kind} />;
+          if (outline === 'black') return <Fragment key={s.id}><Line points={points} stroke="#1d1d1d" strokeWidth={1.8} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} /><SurfaceErasures erasures={s.erasures} kind={s.kind} /></Fragment>;
           return (
             <Fragment key={s.id}>
               <Line points={points} stroke="rgba(25,35,38,.8)" strokeWidth={2.8} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />
               <Line points={points} stroke="#ffffff" strokeWidth={1.5} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />
+              <SurfaceErasures erasures={s.erasures} kind={s.kind} />
             </Fragment>
           );
         }
-        return (
-          <Line
-            key={s.id}
-            points={flatten(s.pts)}
-            closed
-            fill={fill}
-            stroke={outlineColor ?? (s.outline === 'none' ? undefined : fill)}
-            strokeWidth={outlineColor ? 1.5 : s.outline === 'none' ? 0 : 0.35}
-            lineJoin="miter"
-            perfectDrawEnabled={false}
-          />
-        );
+        return <Fragment key={s.id}>
+          <Line points={flatten(s.pts)} closed fill={fill} perfectDrawEnabled={false} />
+          {s.pts.map((p, i) => {
+            const q = s.pts[(i + 1) % s.pts.length];
+            const outline = s.edgeOutlines?.[i] ?? s.outline;
+            if (outline === 'none') return null;
+            const stroke = outline === 'white' ? '#ffffff' : outline === 'black' ? '#1d1d1d' : fill;
+            return <Line key={i} points={[p[0], p[1], q[0], q[1]]} stroke={stroke} strokeWidth={outline === 'white' || outline === 'black' ? 1.5 : 0.35} lineCap="butt" perfectDrawEnabled={false} />;
+          })}
+          <SurfaceErasures erasures={s.erasures} kind={s.kind} />
+        </Fragment>;
       })}
     </>
   );
 });
+
+function SurfaceErasures({ erasures, kind }: { erasures: Point[][] | undefined; kind: SurfaceKind }) {
+  if (!erasures?.length) return null;
+  return <>
+    {erasures.map((stroke, i) => stroke.length === 1
+      ? <Circle key={i} x={stroke[0][0]} y={stroke[0][1]} radius={ERASER_WIDTH / 2} fill={SURFACES[kind].fill} />
+      : stroke.length > 1 && <Line key={i} points={flatten(stroke)} stroke={SURFACES[kind].fill} strokeWidth={ERASER_WIDTH} lineCap="round" lineJoin="round" perfectDrawEnabled={false} />)}
+  </>;
+}
 
 export function BackgroundImage({ image, background }: { image: HTMLImageElement | null; background: Background | null }) {
   if (!image || !background || !background.visible) return null;
@@ -152,7 +165,7 @@ function Handle({ p, scale }: { p: Point; scale: number }) {
   );
 }
 
-function SelectionOutline({ shape, scale }: { shape: MapObject; scale: number }) {
+function SelectionOutline({ shape, scale, selectedEdgeIndex }: { shape: MapObject; scale: number; selectedEdgeIndex: number | null }) {
   if (shape.type === 'label') {
     const b = labelBox(shape);
     return <Outlined pts={rectPts(b.x0, b.y0, b.x1, b.y1)} closed scale={scale} />;
@@ -162,7 +175,7 @@ function SelectionOutline({ shape, scale }: { shape: MapObject; scale: number })
     return (
       <>
         <Circle x={shape.pts[0][0]} y={shape.pts[0][1]} radius={radius} stroke="#ffffff" strokeWidth={3.5 / scale} />
-        <Circle x={shape.pts[0][0]} y={shape.pts[0][1]} radius={radius} stroke={SELECTION_COLOR} strokeWidth={1.6 / scale} />
+        <Circle x={shape.pts[0][0]} y={shape.pts[0][1]} radius={radius} stroke={selectedEdgeIndex === 0 ? '#ffb020' : SELECTION_COLOR} strokeWidth={1.6 / scale} />
         <Handle p={shape.pts[1]} scale={scale} />
       </>
     );
@@ -170,7 +183,8 @@ function SelectionOutline({ shape, scale }: { shape: MapObject; scale: number })
   if (shape.type === 'line' || shape.type === 'curve') {
     return (
       <>
-        <Outlined pts={shape.pts} closed={false} scale={scale} />
+        <Line points={flatten(shape.pts)} stroke="#ffffff" strokeWidth={3.5 / scale} lineCap="round" lineJoin="round" tension={shape.type === 'curve' ? 0.5 : 0} />
+        <Line points={flatten(shape.pts)} stroke={selectedEdgeIndex === 0 ? '#ffb020' : SELECTION_COLOR} strokeWidth={1.6 / scale} lineCap="round" lineJoin="round" tension={shape.type === 'curve' ? 0.5 : 0} />
         {shape.pts.map((p, i) => <Handle key={i} p={p} scale={scale} />)}
       </>
     );
@@ -178,6 +192,7 @@ function SelectionOutline({ shape, scale }: { shape: MapObject; scale: number })
   return (
     <>
       <Outlined pts={shape.pts} closed scale={scale} />
+      {selectedEdgeIndex !== null && shape.pts[selectedEdgeIndex] && shape.pts[(selectedEdgeIndex + 1) % shape.pts.length] && <Line points={[...shape.pts[selectedEdgeIndex], ...shape.pts[(selectedEdgeIndex + 1) % shape.pts.length]]} stroke="#ffb020" strokeWidth={2.5 / scale} lineCap="round" />}
       {shape.pts.map((p, i) => (
         <Handle key={i} p={p} scale={scale} />
       ))}
@@ -249,16 +264,20 @@ interface OverlayProps {
   cursor: XY | null;
   rawCursor: XY | null;
   crosshair: boolean;
+  eraser: boolean;
   kind: SurfaceKind;
   scale: number;
+  selectedEdgeIndex: number | null;
 }
 
-export function EditorOverlay({ selected, draft, cursor, rawCursor, crosshair, kind, scale }: OverlayProps) {
+export function EditorOverlay({ selected, draft, cursor, rawCursor, crosshair, eraser, kind, scale, selectedEdgeIndex }: OverlayProps) {
   const a = 6 / scale;
+  const eraserPoint = rawCursor ?? cursor;
   return (
     <>
-      {selected && !selected.hidden && <SelectionOutline shape={selected} scale={scale} />}
+      {selected && !selected.hidden && <SelectionOutline shape={selected} scale={scale} selectedEdgeIndex={selectedEdgeIndex} />}
       {draft && <DraftPreview draft={draft} cursor={cursor} rawCursor={rawCursor} kind={kind} scale={scale} />}
+      {eraser && eraserPoint && <Circle x={eraserPoint.x} y={eraserPoint.y} radius={ERASER_WIDTH / 2} fill="rgba(23,112,122,.14)" stroke={SELECTION_COLOR} strokeWidth={1 / scale} />}
       {crosshair && cursor && (
         <>
           <Line points={[cursor.x - a, cursor.y, cursor.x + a, cursor.y]} stroke={SELECTION_COLOR} strokeWidth={1.4 / scale} />

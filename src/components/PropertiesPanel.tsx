@@ -9,6 +9,7 @@ export function PropertiesPanel() {
   const kind = useEditorStore((s) => s.kind);
   const shapes = useEditorStore((s) => s.doc.shapes);
   const selectedId = useEditorStore((s) => s.selectedId);
+  const selectedEdgeIndex = useEditorStore((s) => s.selectedEdgeIndex);
   const background = useEditorStore((s) => s.doc.background);
   const st = useEditorStore.getState;
   const setKind = useEditorStore((s) => s.setKind);
@@ -104,22 +105,53 @@ export function PropertiesPanel() {
                 </div>
               </>
             )}
-            <div className="field">
-              <span className="lbl">Outline</span>
-              <div className="row" role="group" aria-label="Selected shape outline">
+            {sel.type !== 'label' && (() => {
+              const edgeCount = sel.type === 'circle' || sel.type === 'line' || sel.type === 'curve' ? 1 : sel.pts.length;
+              const edgeLabel = sel.type === 'circle' ? 'Circle edge' : sel.type === 'line' || sel.type === 'curve' ? 'Boundary line' : `Side ${selectedEdgeIndex === null ? '' : selectedEdgeIndex + 1}`;
+              const defaultOutline = sel.type === 'line' || sel.type === 'curve' ? 'white' : 'none';
+              const currentOutline = selectedEdgeIndex === null
+                ? (sel.outline ?? defaultOutline)
+                : (sel.edgeOutlines?.[selectedEdgeIndex] ?? sel.outline ?? defaultOutline);
+              return <>
+                <div className="field">
+                  <span className="lbl">Select a side</span>
+                  <div className="row" role="group" aria-label="Select shape side">
+                    {Array.from({ length: edgeCount }, (_, i) => (
+                      <button key={i} type="button" className="btn" aria-pressed={selectedEdgeIndex === i} onClick={() => st().selectEdge(selectedEdgeIndex === i ? null : i)}>
+                        {sel.type === 'circle' ? 'Circle edge' : sel.type === 'line' || sel.type === 'curve' ? 'Boundary line' : `Side ${i + 1}`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="muted" style={{ marginTop: 4 }}>Click a side on the map or choose it here.</p>
+                </div>
+                <div className="field">
+                  <span className="lbl">{selectedEdgeIndex === null ? 'Outline for all sides' : `${edgeLabel} outline`}</span>
+                  <div className="row" role="group" aria-label={selectedEdgeIndex === null ? 'Shape outline' : 'Selected side outline'}>
                 {(['none', 'white', 'black'] as const).map((outline) => (
                   <button
                     key={outline}
                     type="button"
                     className="btn"
-                    aria-pressed={(sel.outline ?? (sel.type === 'line' || sel.type === 'curve' ? 'white' : sel.type === 'label' ? (sel.tone === 'dark' ? 'white' : 'black') : 'none')) === outline}
-                    onClick={() => st().setSelectedOutline(outline)}
+                    aria-pressed={currentOutline === outline}
+                    onClick={() => selectedEdgeIndex === null ? st().setSelectedOutline(outline) : st().setSelectedEdgeOutline(outline)}
                   >
-                    {outline === 'none' ? 'None' : outline === 'white' ? 'White' : 'Black'}
+                    {outline === 'none' ? 'Clear' : outline === 'white' ? 'White' : 'Black'}
+                  </button>
+                ))}
+                  </div>
+                </div>
+              </>;
+            })()}
+            {sel.type === 'label' && <div className="field">
+              <span className="lbl">Text outline</span>
+              <div className="row" role="group" aria-label="Text outline">
+                {(['none', 'white', 'black'] as const).map((outline) => (
+                  <button key={outline} type="button" className="btn" aria-pressed={(sel.outline ?? (sel.tone === 'dark' ? 'white' : 'black')) === outline} onClick={() => st().setSelectedOutline(outline)}>
+                    {outline === 'none' ? 'Clear' : outline === 'white' ? 'White' : 'Black'}
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
             <p className="mono" style={{ margin: '0 0 10px' }}>
               {sel.type === 'label' ? 'Text box ' : `${sel.pts.length} points · `}
               {sizeOf(sel).w.toFixed(1)} × {sizeOf(sel).h.toFixed(1)} units

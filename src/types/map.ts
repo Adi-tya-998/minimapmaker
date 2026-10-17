@@ -1,5 +1,7 @@
 /** Side length of the square map sheet, in map units. All object coordinates use these units. */
 export const SHEET_SIZE = 360;
+/** Width, in map units, of the surface-colored boundary eraser. */
+export const ERASER_WIDTH = 3.5;
 
 export type Point = [number, number];
 export interface XY {
@@ -17,15 +19,21 @@ export const SURFACES: Record<SurfaceKind, { name: string; fill: string }> = {
 };
 export const SURFACE_KINDS = Object.keys(SURFACES) as SurfaceKind[];
 
-export type Tool = 'select' | 'poly' | 'rect' | 'circle' | 'line' | 'curve' | 'label';
+export type Tool = 'select' | 'poly' | 'rect' | 'circle' | 'line' | 'curve' | 'eraser' | 'label';
 export type LabelTone = 'light' | 'dark';
 export type Outline = 'none' | 'white' | 'black';
 
 interface ObjectBase {
   id: string;
+  /** Shapes with the same group id move together. */
+  groupId?: string;
   hidden?: boolean;
   /** Optional edge treatment; omitted values retain the editor's original default appearance. */
   outline?: Outline;
+  /** Per-edge treatments override `outline`; closed shapes have one entry per side. */
+  edgeOutlines?: Outline[];
+  /** Surface-colored strokes that erase only portions of this object's outline. */
+  erasures?: Point[][];
   /** Vertices in map units. Labels use a single point; rectangles use four corners (TL, TR, BR, BL). */
   pts: Point[];
 }

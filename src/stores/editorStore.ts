@@ -36,6 +36,8 @@ export interface EditorState {
 
   // --- transient UI state (never saved) ---
   selectedId: string | null;
+  selectedEdgeIndex: number | null;
+  groupingSelection: string[];
   tool: Tool;
   kind: SurfaceKind;
   grid: boolean;
@@ -73,6 +75,11 @@ export interface EditorState {
   setCursor: (snapped: XY | null, raw: XY | null) => void;
   setDraft: (d: Draft | null) => void;
   select: (id: string | null) => void;
+  selectEdge: (index: number | null) => void;
+  toggleGroupingSelection: (id: string) => void;
+  groupSelectedLayers: () => void;
+  addLayerToGroup: (layerId: string, groupId: string) => void;
+  ungroupSelectedLayers: () => void;
 
   setViewport: (w: number, h: number) => void;
   fitView: () => void;
@@ -101,6 +108,8 @@ export interface EditorState {
   toggleHidden: (id: string) => void;
   patchLabel: (id: string, patch: LabelPatch) => void;
   setSelectedOutline: (outline: Outline) => void;
+  setSelectedEdgeOutline: (outline: Outline) => void;
+  addErasurePoint: (id: string, point: Point, startNewStroke: boolean) => void;
   setBackground: (bg: Background | null) => void;
   patchBackground: (patch: Partial<Background>) => void;
 }
@@ -130,6 +139,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   doc: emptyDocument(),
 
   selectedId: null,
+  selectedEdgeIndex: null,
+  groupingSelection: [],
   tool: 'select',
   kind: 'floor',
   grid: true,
@@ -150,7 +161,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   future: [],
   pending: null,
 
-  hydrate: (doc) => set({ doc, status: 'ready', past: [], future: [], pending: null, selectedId: null, draft: null }),
+  hydrate: (doc) => set({ doc, status: 'ready', past: [], future: [], pending: null, selectedId: null, selectedEdgeIndex: null, groupingSelection: [], draft: null }),
   showToast: (message) => set({ toast: { id: Date.now() + Math.random(), message } }),
   clearToast: (id) => set((s) => (s.toast?.id === id ? { toast: null } : {})),
   setTheme: (theme) => set({ theme }),
@@ -175,7 +186,48 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   },
   setCursor: (cursor, rawCursor) => set({ cursor, rawCursor }),
   setDraft: (draft) => set({ draft }),
-  select: (selectedId) => set({ selectedId }),
+  select: (selectedId) => set({ selectedId, selectedEdgeIndex: null }),
+  selectEdge: (selectedEdgeIndex) => set({ selectedEdgeIndex }),
+  toggleGroupingSelection: (id) => set((s) => ({ groupingSelection: s.groupingSelection.includes(id) ? s.groupingSelection.filter((item) => item !== id) : [...s.groupingSelection, id] })),
+  groupSelectedLayers: () => {
+    const s = get();
+    const ids = new Set(s.groupingSelection.filter((id) => s.doc.shapes.some((shape) => shape.id === id)));
+    if (ids.size < 2) return;
+    const groupId = createId();
+    s.act((doc) => ({ ...doc, shapes: doc.shapes.map((shape) => ids.has(shape.id) ? { ...shape, groupId } : shape) }));
+    set({ groupingSelection: [] });
+    get().showToast(`Grouped ${ids.size} layers. Their layer order is preserved; move any member to move them together.`);
+  },
+  addLayerToGroup: (layerId, groupId) => {
+    const s = get();
+    const targetExists = s.doc.shapes.some((shape) => shape.groupId === groupId);
+    const layer = s.doc.shapes.find((shape) => shape.id === layerId);
+    if (!targetExists || !layer || layer.groupId === groupId) return;
+    s.act((doc) => {
+      const shapes = doc.shapes.map((shape) => shape.id === layerId ? { ...shape, groupId } : shape);
+      const counts = new Map<string, number>();
+      shapes.forEach((shape) => {
+        if (shape.groupId) counts.set(shape.groupId, (counts.get(shape.groupId) ?? 0) + 1);
+      });
+      return { ...doc, shapes: shapes.map((shape) => shape.groupId && counts.get(shape.groupId) === 1 ? { ...shape, groupId: undefined } : shape) };
+    });
+    get().showToast('Layer added to group. Its stack position is unchanged.');
+  },
+  ungroupSelectedLayers: () => {
+    const s = get();
+    const selected = new Set(s.groupingSelection);
+    if (!s.doc.shapes.some((shape) => selected.has(shape.id) && shape.groupId)) return;
+    s.act((doc) => {
+      const shapes = doc.shapes.map((shape) => selected.has(shape.id) && shape.groupId ? { ...shape, groupId: undefined } : shape);
+      const counts = new Map<string, number>();
+      shapes.forEach((shape) => {
+        if (shape.groupId) counts.set(shape.groupId, (counts.get(shape.groupId) ?? 0) + 1);
+      });
+      return { ...doc, shapes: shapes.map((shape) => shape.groupId && counts.get(shape.groupId) === 1 ? { ...shape, groupId: undefined } : shape) };
+    });
+    set({ groupingSelection: [] });
+    get().showToast('Selected layers removed from their groups.');
+  },
 
   setViewport: (w, h) => {
     const s = get();
@@ -229,6 +281,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       doc: { ...s.doc, ...prev },
       pending: null,
       selectedId: findShape(prev.shapes, s.selectedId) ? s.selectedId : null,
+      selectedEdgeIndex: null,
     });
   },
   redo: () => {
@@ -241,27 +294,28 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       doc: { ...s.doc, ...next },
       pending: null,
       selectedId: findShape(next.shapes, s.selectedId) ? s.selectedId : null,
+      selectedEdgeIndex: null,
     });
   },
 
   setName: (name) => set((s) => ({ doc: { ...s.doc, name: name.slice(0, 60) } })),
   newProject: () => {
     get().act((doc) => ({ ...doc, name: 'Untitled map', shapes: [], background: null }));
-    set({ selectedId: null, draft: null });
+    set({ selectedId: null, selectedEdgeIndex: null, draft: null });
     get().showToast('Sheet cleared. Press Ctrl+Z or the undo button to bring it back.');
   },
   openDocument: (next) => {
     get().act((doc) => ({ ...doc, name: next.name, shapes: next.shapes, background: next.background }));
-    set({ selectedId: null, draft: null });
+    set({ selectedId: null, selectedEdgeIndex: null, draft: null });
   },
   resetSheetForOfficialMap: (mapName) => {
     get().act((doc) => ({ ...doc, shapes: [], background: null }));
-    set({ selectedId: null, draft: null });
+    set({ selectedId: null, selectedEdgeIndex: null, draft: null });
     get().showToast(`Sheet cleared for ${mapName}. Map layouts are not added yet.`);
   },
   addShape: (shape) => {
     get().act((doc) => ({ ...doc, shapes: [...doc.shapes, shape] }));
-    set({ selectedId: shape.id });
+    set({ selectedId: shape.id, selectedEdgeIndex: null });
   },
   finishPolygon: () => {
     const { draft, kind } = get();
@@ -274,7 +328,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     const id = get().selectedId;
     if (id === null) return;
     get().act((doc) => ({ ...doc, shapes: doc.shapes.filter((s) => s.id !== id) }));
-    set({ selectedId: null });
+    set({ selectedId: null, selectedEdgeIndex: null });
   },
   reorderSelected: (dir) => {
     const s = get();
@@ -295,11 +349,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     s.addShape({ ...sel, id: createId(), pts });
   },
   nudgeSelected: (dx, dy) => {
-    const id = get().selectedId;
-    if (id === null) return;
-    get().act((doc) =>
-      mapShape(doc, id, (o) => ({ ...o, pts: o.pts.map(([x, y]) => [x + dx, y + dy] as Point) })),
-    );
+    const s = get();
+    const selected = findShape(s.doc.shapes, s.selectedId);
+    if (!selected) return;
+    const members = selected.groupId ? s.doc.shapes.filter((shape) => shape.groupId === selected.groupId) : [selected];
+    const ids = new Set(members.map((shape) => shape.id));
+    s.act((doc) => ({ ...doc, shapes: doc.shapes.map((shape) => ids.has(shape.id) ? { ...shape, pts: shape.pts.map(([x, y]) => [x + dx, y + dy] as Point) } : shape) }));
   },
   toggleHidden: (id) => {
     get().act((doc) => mapShape(doc, id, (o) => ({ ...o, hidden: o.hidden ? undefined : true })));
@@ -311,7 +366,29 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   setSelectedOutline: (outline) => {
     const id = get().selectedId;
     if (id === null) return;
-    get().act((doc) => mapShape(doc, id, (o) => ({ ...o, outline })));
+    get().act((doc) => mapShape(doc, id, (o) => ({ ...o, outline, edgeOutlines: undefined })));
+  },
+  setSelectedEdgeOutline: (outline) => {
+    const { selectedId, selectedEdgeIndex } = get();
+    if (selectedId === null || selectedEdgeIndex === null) return;
+    get().act((doc) => mapShape(doc, selectedId, (o) => {
+      const edgeOutlines = [...(o.edgeOutlines ?? [])];
+      edgeOutlines[selectedEdgeIndex] = outline;
+      return { ...o, edgeOutlines };
+    }));
+  },
+  addErasurePoint: (id, point, startNewStroke) => {
+    get().liveEdit((doc) => mapShape(doc, id, (o) => {
+      const erasures = (o.erasures ?? []).map((stroke) => stroke.slice());
+      const last = erasures[erasures.length - 1];
+      const startsStroke = startNewStroke || !last || last.length >= 500;
+      if (startsStroke && erasures.length < 500) erasures.push([point]);
+      else if (last) {
+        const previous = last[last.length - 1];
+        if (Math.hypot(point[0] - previous[0], point[1] - previous[1]) >= 0.3 && last.length < 500) last.push(point);
+      }
+      return { ...o, erasures };
+    }));
   },
   setBackground: (bg) => get().act((doc) => ({ ...doc, background: bg })),
   patchBackground: (patch) => {

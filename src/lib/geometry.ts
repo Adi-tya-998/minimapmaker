@@ -88,8 +88,8 @@ export function hitTest(shapes: MapObject[], p: XY, scale = 1): MapObject | null
       for (let j = 0; j < s.pts.length - 1; j++) {
         if (segmentDistance(p, s.pts[j], s.pts[j + 1]).d * scale <= HIT_PX) return s;
       }
-    } else if (pointInPolygon(p, s.pts)) {
-      return s;
+    } else {
+      if (pointInPolygon(p, s.pts) || (nearestEdge(s.pts, p)?.d ?? Infinity) * scale <= HIT_PX) return s;
     }
   }
   return null;
@@ -124,8 +124,14 @@ function segmentDistance(p: XY, a: Point, b: Point) {
 }
 
 export function nearestEdge(pts: Point[], p: XY): EdgeHit | null {
+  return nearestPathEdge(pts, p, true);
+}
+
+/** Closest segment on an open path or closed polygon. */
+export function nearestPathEdge(pts: Point[], p: XY, closed: boolean): EdgeHit | null {
   let best: EdgeHit | null = null;
-  for (let i = 0; i < pts.length; i++) {
+  const count = closed ? pts.length : pts.length - 1;
+  for (let i = 0; i < count; i++) {
     const r = segmentDistance(p, pts[i], pts[(i + 1) % pts.length]);
     if (!best || r.d < best.d) best = { d: r.d, i, x: r.x, y: r.y };
   }

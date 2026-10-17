@@ -19,20 +19,27 @@ const coord = z
 const point = z.tuple([coord, coord]);
 const kind = z.enum(['floor', 'lane', 'site', 'cut']);
 const outline = z.enum(['none', 'white', 'black']).optional();
+const edgeOutlines = z.array(z.enum(['none', 'white', 'black'])).max(MAX_POINTS).optional();
+const erasures = z.array(z.array(point).min(1).max(MAX_POINTS)).max(500).optional();
+const groupId = z.string().max(100).optional();
 
 const labelSchema = z
   .object({
     type: z.literal('label'),
+    groupId,
     pts: z.array(point).min(1),
     text: z.string().optional(),
     size: z.number().finite().optional(),
     tone: z.string().optional(),
     hidden: z.boolean().optional(),
     outline,
+    edgeOutlines,
+    erasures,
   })
   .transform(
     (s): MapObject => ({
       id: createId(),
+      groupId: s.groupId,
       type: 'label',
       pts: [s.pts[0] as Point],
       text: (s.text ?? '').slice(0, LABEL_LIMITS.maxText),
@@ -40,59 +47,79 @@ const labelSchema = z
       tone: s.tone === 'dark' ? 'dark' : 'light',
       hidden: s.hidden ? true : undefined,
       outline: s.outline,
+      edgeOutlines: s.edgeOutlines,
+      erasures: s.erasures as Point[][] | undefined,
     }),
   );
 
 const lineSchema = z.object({
   type: z.enum(['line', 'curve']),
+  groupId,
   kind,
   pts: z.array(point).min(2).max(MAX_POINTS),
   hidden: z.boolean().optional(),
   outline,
+  edgeOutlines,
+  erasures,
 }).transform((s): MapObject => ({
   id: createId(),
+  groupId: s.groupId,
   type: s.type,
   kind: s.kind,
   pts: s.pts as Point[],
   hidden: s.hidden ? true : undefined,
   outline: s.outline as Outline | undefined,
+  edgeOutlines: s.edgeOutlines as Outline[] | undefined,
+  erasures: s.erasures as Point[][] | undefined,
 }));
 
 // Files from the original editor flag rectangles with `rect: true`; anything else with a rect type becomes a polygon.
 const filledSchema = z
   .object({
     type: z.enum(['poly', 'rect']),
+    groupId,
     kind,
     pts: z.array(point).min(3).max(MAX_POINTS),
     rect: z.boolean().optional(),
     hidden: z.boolean().optional(),
     outline,
+    edgeOutlines,
+    erasures,
   })
   .transform((s): MapObject => {
     const isRect = s.type === 'rect' && s.pts.length === 4 && s.rect === true;
     return {
       id: createId(),
+      groupId: s.groupId,
       type: isRect ? 'rect' : 'poly',
       kind: s.kind,
       pts: s.pts as Point[],
       hidden: s.hidden ? true : undefined,
       outline: s.outline,
+      edgeOutlines: s.edgeOutlines,
+      erasures: s.erasures as Point[][] | undefined,
     };
   });
 
 const circleSchema = z.object({
   type: z.literal('circle'),
+  groupId,
   kind,
   pts: z.array(point).length(2),
   hidden: z.boolean().optional(),
   outline,
+  edgeOutlines,
+  erasures,
 }).transform((s): MapObject => ({
   id: createId(),
+  groupId: s.groupId,
   type: 'circle',
   kind: s.kind,
   pts: s.pts as Point[],
   hidden: s.hidden ? true : undefined,
   outline: s.outline,
+  edgeOutlines: s.edgeOutlines as Outline[] | undefined,
+  erasures: s.erasures as Point[][] | undefined,
 }));
 
 const shapeSchema = z.union([labelSchema, lineSchema, circleSchema, filledSchema]);

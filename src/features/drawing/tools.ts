@@ -1,4 +1,4 @@
-import { Circle, Minus, MousePointer2, Pentagon, Spline, Square, Type } from 'lucide-react';
+import { Circle, Eraser, Minus, MousePointer2, Pentagon, Spline, Square, Type } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Tool } from '../../types/map';
 
@@ -52,6 +52,13 @@ export const TOOLS: ToolDef[] = [
     key: 'C',
     icon: Spline,
     hint: 'Drag to sketch a smooth curved boundary. Hold Alt to ignore the grid.',
+  },
+  {
+    id: 'eraser',
+    label: 'Boundary eraser',
+    key: 'E',
+    icon: Eraser,
+    hint: 'Erase only the boundary under the brush. The erased area is painted with its surface color.',
   },
   {
     id: 'label',

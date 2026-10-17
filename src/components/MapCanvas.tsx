@@ -34,10 +34,11 @@ export function MapCanvas() {
   const [dropping, setDropping] = useState(false);
   const [fontTick, setFontTick] = useState(0);
 
-  const { doc, selectedId, tool, kind, grid, gridSize, view, viewport, draft, cursor, rawCursor } = useEditorStore(
+  const { doc, selectedId, selectedEdgeIndex, tool, kind, grid, gridSize, view, viewport, draft, cursor, rawCursor } = useEditorStore(
     useShallow((s) => ({
       doc: s.doc,
       selectedId: s.selectedId,
+      selectedEdgeIndex: s.selectedEdgeIndex,
       tool: s.tool,
       kind: s.kind,
       grid: s.grid,
@@ -119,9 +120,11 @@ export function MapCanvas() {
               draft={draft}
               cursor={cursor}
               rawCursor={rawCursor}
-              crosshair={tool !== 'select'}
+              crosshair={tool !== 'select' && tool !== 'eraser'}
+              eraser={tool === 'eraser'}
               kind={kind}
               scale={scale}
+              selectedEdgeIndex={selectedEdgeIndex}
             />
           </Layer>
         </Stage>

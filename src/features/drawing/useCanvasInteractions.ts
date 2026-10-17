@@ -1,13 +1,31 @@
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
-import { hitTest, hitVertex, moveRectCorner, nearestEdge, rectPts, snapValue, HIT_PX } from '../../lib/geometry';
+import { circleRadius, hitTest, hitVertex, moveRectCorner, nearestEdge, nearestPathEdge, rectPts, snapValue, HIT_PX } from '../../lib/geometry';
 import { createId } from '../../lib/id';
 import { findShape, mapShape, useEditorStore } from '../../stores/editorStore';
-import type { Point, XY } from '../../types/map';
+import type { MapObject, Point, XY } from '../../types/map';
+
+const ERASER_HIT_PX = 8;
+
+function nearestBoundary(shape: MapObject, p: XY): { distance: number; point: Point } | null {
+  if (shape.type === 'label') return null;
+  if (shape.type === 'circle') {
+    const dx = p.x - shape.pts[0][0];
+    const dy = p.y - shape.pts[0][1];
+    const radius = circleRadius(shape.pts);
+    const distanceFromCenter = Math.hypot(dx, dy);
+    const directionX = distanceFromCenter === 0 ? 1 : dx / distanceFromCenter;
+    const directionY = distanceFromCenter === 0 ? 0 : dy / distanceFromCenter;
+    return { distance: Math.abs(distanceFromCenter - radius), point: [shape.pts[0][0] + directionX * radius, shape.pts[0][1] + directionY * radius] };
+  }
+  const hit = nearestPathEdge(shape.pts, p, shape.type === 'poly' || shape.type === 'rect');
+  return hit ? { distance: hit.d, point: [hit.x, hit.y] } : null;
+}
 
 type Drag =
   | { mode: 'pan'; x: number; y: number }
-  | { mode: 'move'; id: string; start: XY; orig: Point[] }
+  | { mode: 'move'; start: XY; members: Array<{ id: string; pts: Point[] }> }
+  | { mode: 'erase'; id: string; activePath: boolean }
   | { mode: 'vertex'; id: string; index: number };
 
 /**
@@ -56,7 +74,23 @@ export function useCanvasInteractions(hostRef: RefObject<HTMLDivElement>): void 
       const sp = snapPoint(p);
       s.setCursor(sp, p);
 
-      if (s.tool === 'select') {
+      if (s.tool === 'eraser') {
+        let nearest: { shape: MapObject; point: Point; distance: number } | null = null;
+        for (let i = s.doc.shapes.length - 1; i >= 0; i--) {
+          const shape = s.doc.shapes[i];
+          if (shape.hidden) continue;
+          const edge = nearestBoundary(shape, p);
+          if (edge && edge.distance * s.view.scale <= ERASER_HIT_PX && (!nearest || edge.distance < nearest.distance)) {
+            nearest = { shape, point: edge.point, distance: edge.distance };
+          }
+        }
+        if (nearest) {
+          s.select(nearest.shape.id);
+          s.checkpoint();
+          s.addErasurePoint(nearest.shape.id, nearest.point, true);
+          drag = { mode: 'erase', id: nearest.shape.id, activePath: true };
+        }
+      } else if (s.tool === 'select') {
         const sel = findShape(s.doc.shapes, s.selectedId);
         if (sel && !sel.hidden && sel.type !== 'label') {
           const vi = hitVertex(sel, p, s.view.scale);
@@ -73,8 +107,24 @@ export function useCanvasInteractions(hostRef: RefObject<HTMLDivElement>): void 
         const hit = hitTest(s.doc.shapes, p, s.view.scale);
         if (hit) {
           s.select(hit.id);
+          if (hit.type !== 'label') {
+            let edgeIndex: number | null = null;
+            let distance = Infinity;
+            if (hit.type === 'circle') {
+              distance = Math.abs(Math.hypot(p.x - hit.pts[0][0], p.y - hit.pts[0][1]) - circleRadius(hit.pts));
+              if (distance * s.view.scale <= HIT_PX) edgeIndex = 0;
+            } else {
+              const edge = nearestPathEdge(hit.pts, p, hit.type === 'poly' || hit.type === 'rect');
+              if (edge) {
+                distance = edge.d;
+                if (distance * s.view.scale <= HIT_PX) edgeIndex = hit.type === 'line' || hit.type === 'curve' ? 0 : edge.i;
+              }
+            }
+            if (edgeIndex !== null) s.selectEdge(edgeIndex);
+          }
           s.checkpoint();
-          drag = { mode: 'move', id: hit.id, start: p, orig: hit.pts.map((q) => [q[0], q[1]] as Point) };
+          const members = hit.groupId ? s.doc.shapes.filter((shape) => shape.groupId === hit.groupId) : [hit];
+          drag = { mode: 'move', start: p, members: members.map((shape) => ({ id: shape.id, pts: shape.pts.map((q) => [q[0], q[1]] as Point) })) };
         } else {
           s.select(null);
         }
@@ -128,15 +178,31 @@ export function useCanvasInteractions(hostRef: RefObject<HTMLDivElement>): void 
       const sp = snapPoint(p);
       s.setCursor(sp, p);
 
-      if (drag?.mode === 'move') {
+      if (drag?.mode === 'erase') {
         const d = drag;
-        const f = d.orig[0];
+        const shape = findShape(s.doc.shapes, d.id);
+        const edge = shape ? nearestBoundary(shape, p) : null;
+        const onBoundary = edge !== null && edge.distance * s.view.scale <= ERASER_HIT_PX;
+        if (onBoundary && edge) {
+          s.addErasurePoint(d.id, edge.point, !d.activePath);
+          drag = { ...d, activePath: true };
+        } else if (d.activePath) {
+          drag = { ...d, activePath: false };
+        }
+      } else if (drag?.mode === 'move') {
+        const d = drag;
+        const f = d.members.find((member) => member.id === s.selectedId)?.pts[0] ?? d.members[0]?.pts[0];
+        if (!f) return;
         const rx = p.x - d.start.x;
         const ry = p.y - d.start.y;
         const o = snapOpts();
         const dx = o.snap && !o.alt ? snapValue(f[0] + rx, o) - f[0] : Math.round(rx * 10) / 10;
         const dy = o.snap && !o.alt ? snapValue(f[1] + ry, o) - f[1] : Math.round(ry * 10) / 10;
-        s.liveEdit((doc) => mapShape(doc, d.id, (sh) => ({ ...sh, pts: d.orig.map((q) => [q[0] + dx, q[1] + dy] as Point) })));
+        const originals = new Map(d.members.map((member) => [member.id, member.pts]));
+        s.liveEdit((doc) => ({ ...doc, shapes: doc.shapes.map((shape) => {
+          const pts = originals.get(shape.id);
+          return pts ? { ...shape, pts: pts.map(([x, y]) => [x + dx, y + dy] as Point) } : shape;
+        }) }));
       } else if (drag?.mode === 'vertex') {
         const d = drag;
         s.liveEdit((doc) =>

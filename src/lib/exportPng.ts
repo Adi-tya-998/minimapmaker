@@ -1,4 +1,4 @@
-import { SHEET_SIZE, SURFACES } from '../types/map';
+import { ERASER_WIDTH, SHEET_SIZE, SURFACES } from '../types/map';
 import type { LabelObject, MapObject } from '../types/map';
 import type { MapDocument } from '../types/project';
 import { circleRadius, LABEL_FONT } from './geometry';
@@ -46,6 +46,30 @@ function paintLabel(c: CanvasRenderingContext2D, s: LabelObject) {
   c.restore();
 }
 
+function paintErasures(c: CanvasRenderingContext2D, s: Exclude<MapObject, LabelObject>) {
+  if (!s.erasures?.length) return;
+  c.save();
+  c.strokeStyle = SURFACES[s.kind].fill;
+  c.lineWidth = ERASER_WIDTH;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  for (const erasure of s.erasures) {
+    if (erasure.length < 2) {
+      const p = erasure[0];
+      c.beginPath();
+      c.arc(p[0], p[1], ERASER_WIDTH / 2, 0, Math.PI * 2);
+      c.fillStyle = SURFACES[s.kind].fill;
+      c.fill();
+      continue;
+    }
+    c.beginPath();
+    c.moveTo(erasure[0][0], erasure[0][1]);
+    for (let i = 1; i < erasure.length; i++) c.lineTo(erasure[i][0], erasure[i][1]);
+    c.stroke();
+  }
+  c.restore();
+}
+
 /** Paint only the created map (no sheet fill, reference image, grid, or editor overlays). */
 export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
   for (const s of doc.shapes) {
@@ -55,7 +79,6 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
       continue;
     }
     const fill = SURFACES[s.kind].fill;
-    const outlineColor = s.outline === 'white' ? '#ffffff' : s.outline === 'black' ? '#1d1d1d' : null;
     if (s.type === 'line' || s.type === 'curve') {
       if (s.type === 'curve') traceCurve(c, s.pts);
       else {
@@ -65,18 +88,11 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
       }
       c.lineCap = 'round';
       c.lineJoin = 'round';
-      if (s.outline === 'none') {
-        c.strokeStyle = '#ffffff';
-        c.lineWidth = 1.5;
-      } else if (s.outline === 'black') {
+      const outline = s.edgeOutlines?.[0] ?? s.outline ?? 'white';
+      if (outline === 'none') continue;
+      if (outline === 'black') {
         c.strokeStyle = '#1d1d1d';
         c.lineWidth = 1.8;
-      } else if (s.outline === 'white') {
-        c.strokeStyle = 'rgba(25,35,38,.8)';
-        c.lineWidth = 2.8;
-        c.stroke();
-        c.strokeStyle = '#ffffff';
-        c.lineWidth = 1.5;
       } else {
         c.strokeStyle = 'rgba(25,35,38,.8)';
         c.lineWidth = 2.8;
@@ -85,6 +101,7 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
         c.lineWidth = 1.5;
       }
       c.stroke();
+      paintErasures(c, s);
       continue;
     }
     if (s.type === 'circle') {
@@ -92,31 +109,37 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
       c.arc(s.pts[0][0], s.pts[0][1], circleRadius(s.pts), 0, Math.PI * 2);
       c.fillStyle = fill;
       c.fill();
-      if (outlineColor) {
-        c.strokeStyle = outlineColor;
+      const outline = s.edgeOutlines?.[0] ?? s.outline;
+      if (outline === 'white' || outline === 'black') {
+        c.strokeStyle = outline === 'white' ? '#ffffff' : '#1d1d1d';
         c.lineWidth = 1.5;
         c.stroke();
-      } else if (s.outline !== 'none') {
+      } else if (outline === undefined) {
         c.strokeStyle = fill;
         c.lineWidth = 0.35;
         c.stroke();
       }
+      paintErasures(c, s);
       continue;
     }
     tracePath(c, s.pts);
     c.fillStyle = fill;
     c.fill();
-    if (outlineColor) {
-      c.strokeStyle = outlineColor;
-      c.lineWidth = 1.5;
-      c.lineJoin = 'miter';
-      c.stroke();
-    } else if (s.outline !== 'none') {
-      c.strokeStyle = fill;
-      c.lineWidth = 0.35;
-      c.lineJoin = 'miter';
+    c.lineCap = 'butt';
+    c.lineJoin = 'miter';
+    for (let i = 0; i < s.pts.length; i++) {
+      const outline = s.edgeOutlines?.[i] ?? s.outline;
+      if (outline === 'none') continue;
+      const a = s.pts[i];
+      const b = s.pts[(i + 1) % s.pts.length];
+      c.beginPath();
+      c.moveTo(a[0], a[1]);
+      c.lineTo(b[0], b[1]);
+      c.strokeStyle = outline === 'white' ? '#ffffff' : outline === 'black' ? '#1d1d1d' : fill;
+      c.lineWidth = outline === 'white' || outline === 'black' ? 1.5 : 0.35;
       c.stroke();
     }
+    paintErasures(c, s);
   }
 }
 
