@@ -13,6 +13,7 @@ export const SELECTION_COLOR = '#0aa6b7';
 function LabelNode({ s }: { s: LabelObject }) {
   const b = labelBox(s);
   const dark = s.tone === 'dark';
+  const outlineColor = s.outline === 'white' ? '#ffffff' : s.outline === 'black' ? '#1d1d1d' : s.outline === 'none' ? undefined : dark ? 'rgba(255,255,255,.75)' : 'rgba(30,30,30,.55)';
   return (
     <Text
       x={b.x0}
@@ -27,8 +28,8 @@ function LabelNode({ s }: { s: LabelObject }) {
       verticalAlign="middle"
       wrap="none"
       fill={dark ? '#1d1d1d' : '#ffffff'}
-      stroke={dark ? 'rgba(255,255,255,.75)' : 'rgba(30,30,30,.55)'}
-      strokeWidth={Math.max(1, s.size * 0.2)}
+      stroke={outlineColor}
+      strokeWidth={outlineColor ? Math.max(1, s.size * 0.2) : 0}
       fillAfterStrokeEnabled
       lineJoin="round"
     />
@@ -48,11 +49,15 @@ export const SheetShapes = memo(function SheetShapes({ shapes }: ShapesProps) {
         if (s.hidden) return null;
         if (s.type === 'label') return <LabelNode key={s.id} s={s} />;
         const fill = SURFACES[s.kind].fill;
+        const outlineColor = s.outline === 'white' ? '#ffffff' : s.outline === 'black' ? '#1d1d1d' : undefined;
         if (s.type === 'circle') {
-          return <Circle key={s.id} x={s.pts[0][0]} y={s.pts[0][1]} radius={circleRadius(s.pts)} fill={fill} stroke={fill} strokeWidth={0.35} perfectDrawEnabled={false} />;
+          return <Circle key={s.id} x={s.pts[0][0]} y={s.pts[0][1]} radius={circleRadius(s.pts)} fill={fill} stroke={outlineColor ?? (s.outline === 'none' ? undefined : fill)} strokeWidth={outlineColor ? 1.5 : s.outline === 'none' ? 0 : 0.35} perfectDrawEnabled={false} />;
         }
         if (s.type === 'line' || s.type === 'curve') {
           const points = flatten(s.pts);
+          if (s.outline === 'none') return <Line key={s.id} points={points} stroke="#ffffff" strokeWidth={1.5} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />;
+          if (s.outline === 'black') return <Line key={s.id} points={points} stroke="#1d1d1d" strokeWidth={1.8} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />;
+          if (s.outline === 'white') return <Fragment key={s.id}><Line points={points} stroke="rgba(25,35,38,.8)" strokeWidth={2.8} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} /><Line points={points} stroke="#ffffff" strokeWidth={1.5} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} /></Fragment>;
           return (
             <Fragment key={s.id}>
               <Line points={points} stroke="rgba(25,35,38,.8)" strokeWidth={2.8} lineCap="round" lineJoin="round" tension={s.type === 'curve' ? 0.5 : 0} perfectDrawEnabled={false} />
@@ -66,8 +71,8 @@ export const SheetShapes = memo(function SheetShapes({ shapes }: ShapesProps) {
             points={flatten(s.pts)}
             closed
             fill={fill}
-            stroke={fill}
-            strokeWidth={0.35}
+            stroke={outlineColor ?? (s.outline === 'none' ? undefined : fill)}
+            strokeWidth={outlineColor ? 1.5 : s.outline === 'none' ? 0 : 0.35}
             lineJoin="miter"
             perfectDrawEnabled={false}
           />

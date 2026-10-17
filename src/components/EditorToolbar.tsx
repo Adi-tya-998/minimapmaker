@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { FilePlus, FolderOpen, ImageDown, Map as MapIcon, Maximize, Minus, Monitor, Moon, Plus, Redo2, Save, Sun, Undo2 } from 'lucide-react';
 import { openProjectFile, saveProjectFile } from '../features/projects/projectIO';
 import { fitTransform } from '../lib/geometry';
@@ -8,6 +8,21 @@ import type { ThemeMode } from '../lib/storage';
 
 const NEXT_THEME: Record<ThemeMode, ThemeMode> = { system: 'light', light: 'dark', dark: 'system' };
 const THEME_ICON = { system: Monitor, light: Sun, dark: Moon } as const;
+const OFFICIAL_MAPS = [
+  'Abyss',
+  'Ascent',
+  'Bind',
+  'Breeze',
+  'Corrode',
+  'Fracture',
+  'Haven',
+  'Icebox',
+  'Lotus',
+  'Pearl',
+  'Split',
+  'Sunset',
+  'Summit',
+];
 
 export function EditorToolbar({ onExport }: { onExport: () => void }) {
   const { canUndo, canRedo, undo, redo } = useEditorHistory();
@@ -20,6 +35,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
   const viewport = useEditorStore((s) => s.viewport);
   const st = useEditorStore.getState;
   const fileInput = useRef<HTMLInputElement>(null);
+  const [selectedOfficialMap, setSelectedOfficialMap] = useState('');
 
   const zoomPct = Math.round((scale / fitTransform(viewport.w, viewport.h).scale) * 100);
   const ThemeIcon = THEME_ICON[theme];
@@ -44,6 +60,25 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
           onChange={(e) => st().setName(e.target.value)}
         />
       </div>
+
+      <select
+        className="btn"
+        aria-label="Select an official VALORANT map"
+        title="Choose an official map (layouts can be added later)"
+        value={selectedOfficialMap}
+        onChange={(e) => {
+          const map = e.target.value;
+          setSelectedOfficialMap(map);
+          if (map) st().resetSheetForOfficialMap(map);
+        }}
+      >
+        <option value="">Official maps…</option>
+        {OFFICIAL_MAPS.map((map) => (
+          <option key={map} value={map}>
+            {map}
+          </option>
+        ))}
+      </select>
 
       <div className="grp" role="group" aria-label="History">
         <button type="button" className="btn icon" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!canUndo} onClick={undo}>

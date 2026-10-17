@@ -19,10 +19,13 @@ export const SURFACE_KINDS = Object.keys(SURFACES) as SurfaceKind[];
 
 export type Tool = 'select' | 'poly' | 'rect' | 'circle' | 'line' | 'curve' | 'label';
 export type LabelTone = 'light' | 'dark';
+export type Outline = 'none' | 'white' | 'black';
 
 interface ObjectBase {
   id: string;
   hidden?: boolean;
+  /** Optional edge treatment; omitted values retain the editor's original default appearance. */
+  outline?: Outline;
   /** Vertices in map units. Labels use a single point; rectangles use four corners (TL, TR, BR, BL). */
   pts: Point[];
 }

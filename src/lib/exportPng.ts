@@ -35,9 +35,12 @@ function paintLabel(c: CanvasRenderingContext2D, s: LabelObject) {
   c.textAlign = 'center';
   c.textBaseline = 'middle';
   c.lineJoin = 'round';
-  c.lineWidth = Math.max(1, s.size * 0.2);
-  c.strokeStyle = s.tone === 'dark' ? 'rgba(255,255,255,.75)' : 'rgba(30,30,30,.55)';
-  c.strokeText(s.text, s.pts[0][0], s.pts[0][1]);
+  const outlineColor = s.outline === 'white' ? '#ffffff' : s.outline === 'black' ? '#1d1d1d' : s.outline === 'none' ? null : s.tone === 'dark' ? 'rgba(255,255,255,.75)' : 'rgba(30,30,30,.55)';
+  if (outlineColor) {
+    c.lineWidth = Math.max(1, s.size * 0.2);
+    c.strokeStyle = outlineColor;
+    c.strokeText(s.text, s.pts[0][0], s.pts[0][1]);
+  }
   c.fillStyle = s.tone === 'dark' ? '#1d1d1d' : '#ffffff';
   c.fillText(s.text, s.pts[0][0], s.pts[0][1]);
   c.restore();
@@ -52,6 +55,7 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
       continue;
     }
     const fill = SURFACES[s.kind].fill;
+    const outlineColor = s.outline === 'white' ? '#ffffff' : s.outline === 'black' ? '#1d1d1d' : null;
     if (s.type === 'line' || s.type === 'curve') {
       if (s.type === 'curve') traceCurve(c, s.pts);
       else {
@@ -59,15 +63,27 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
         c.moveTo(s.pts[0][0], s.pts[0][1]);
         c.lineTo(s.pts[1][0], s.pts[1][1]);
       }
-      c.strokeStyle = 'rgba(25,35,38,.8)';
-      c.lineWidth = 2.8;
       c.lineCap = 'round';
       c.lineJoin = 'round';
-      c.stroke();
-      c.strokeStyle = '#ffffff';
-      c.lineWidth = 1.5;
-      c.lineCap = 'round';
-      c.lineJoin = 'round';
+      if (s.outline === 'none') {
+        c.strokeStyle = '#ffffff';
+        c.lineWidth = 1.5;
+      } else if (s.outline === 'black') {
+        c.strokeStyle = '#1d1d1d';
+        c.lineWidth = 1.8;
+      } else if (s.outline === 'white') {
+        c.strokeStyle = 'rgba(25,35,38,.8)';
+        c.lineWidth = 2.8;
+        c.stroke();
+        c.strokeStyle = '#ffffff';
+        c.lineWidth = 1.5;
+      } else {
+        c.strokeStyle = 'rgba(25,35,38,.8)';
+        c.lineWidth = 2.8;
+        c.stroke();
+        c.strokeStyle = '#ffffff';
+        c.lineWidth = 1.5;
+      }
       c.stroke();
       continue;
     }
@@ -76,18 +92,31 @@ export function paintSheet(c: CanvasRenderingContext2D, doc: MapDocument) {
       c.arc(s.pts[0][0], s.pts[0][1], circleRadius(s.pts), 0, Math.PI * 2);
       c.fillStyle = fill;
       c.fill();
-      c.strokeStyle = fill;
-      c.lineWidth = 0.35;
-      c.stroke();
+      if (outlineColor) {
+        c.strokeStyle = outlineColor;
+        c.lineWidth = 1.5;
+        c.stroke();
+      } else if (s.outline !== 'none') {
+        c.strokeStyle = fill;
+        c.lineWidth = 0.35;
+        c.stroke();
+      }
       continue;
     }
     tracePath(c, s.pts);
     c.fillStyle = fill;
     c.fill();
-    c.strokeStyle = fill;
-    c.lineWidth = 0.35;
-    c.lineJoin = 'miter';
-    c.stroke();
+    if (outlineColor) {
+      c.strokeStyle = outlineColor;
+      c.lineWidth = 1.5;
+      c.lineJoin = 'miter';
+      c.stroke();
+    } else if (s.outline !== 'none') {
+      c.strokeStyle = fill;
+      c.lineWidth = 0.35;
+      c.lineJoin = 'miter';
+      c.stroke();
+    }
   }
 }
 

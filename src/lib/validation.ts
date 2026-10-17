@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { LABEL_LIMITS, SHEET_SIZE } from '../types/map';
-import type { MapObject, Point } from '../types/map';
+import type { MapObject, Outline, Point } from '../types/map';
 import { FILE_APP, FILE_VERSION } from '../types/project';
 import type { Background, MapDocument, ProjectFile } from '../types/project';
 import { clamp } from './geometry';
@@ -18,6 +18,7 @@ const coord = z
   .transform((v) => clamp(v, -COORD_MARGIN, SHEET_SIZE + COORD_MARGIN));
 const point = z.tuple([coord, coord]);
 const kind = z.enum(['floor', 'lane', 'site', 'cut']);
+const outline = z.enum(['none', 'white', 'black']).optional();
 
 const labelSchema = z
   .object({
@@ -27,6 +28,7 @@ const labelSchema = z
     size: z.number().finite().optional(),
     tone: z.string().optional(),
     hidden: z.boolean().optional(),
+    outline,
   })
   .transform(
     (s): MapObject => ({
@@ -37,6 +39,7 @@ const labelSchema = z
       size: clamp(s.size ?? 12, LABEL_LIMITS.minSize, LABEL_LIMITS.maxSize),
       tone: s.tone === 'dark' ? 'dark' : 'light',
       hidden: s.hidden ? true : undefined,
+      outline: s.outline,
     }),
   );
 
@@ -45,12 +48,14 @@ const lineSchema = z.object({
   kind,
   pts: z.array(point).min(2).max(MAX_POINTS),
   hidden: z.boolean().optional(),
+  outline,
 }).transform((s): MapObject => ({
   id: createId(),
   type: s.type,
   kind: s.kind,
   pts: s.pts as Point[],
   hidden: s.hidden ? true : undefined,
+  outline: s.outline as Outline | undefined,
 }));
 
 // Files from the original editor flag rectangles with `rect: true`; anything else with a rect type becomes a polygon.
@@ -61,6 +66,7 @@ const filledSchema = z
     pts: z.array(point).min(3).max(MAX_POINTS),
     rect: z.boolean().optional(),
     hidden: z.boolean().optional(),
+    outline,
   })
   .transform((s): MapObject => {
     const isRect = s.type === 'rect' && s.pts.length === 4 && s.rect === true;
@@ -70,6 +76,7 @@ const filledSchema = z
       kind: s.kind,
       pts: s.pts as Point[],
       hidden: s.hidden ? true : undefined,
+      outline: s.outline,
     };
   });
 
@@ -78,12 +85,14 @@ const circleSchema = z.object({
   kind,
   pts: z.array(point).length(2),
   hidden: z.boolean().optional(),
+  outline,
 }).transform((s): MapObject => ({
   id: createId(),
   type: 'circle',
   kind: s.kind,
   pts: s.pts as Point[],
   hidden: s.hidden ? true : undefined,
+  outline: s.outline,
 }));
 
 const shapeSchema = z.union([labelSchema, lineSchema, circleSchema, filledSchema]);

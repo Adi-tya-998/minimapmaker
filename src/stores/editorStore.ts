@@ -4,7 +4,7 @@ import { createId } from '../lib/id';
 import { loadTheme } from '../lib/storage';
 import type { ThemeMode } from '../lib/storage';
 import { SHEET_SIZE } from '../types/map';
-import type { Draft, LabelObject, MapObject, Point, SurfaceKind, Tool, XY } from '../types/map';
+import type { Draft, LabelObject, MapObject, Outline, Point, SurfaceKind, Tool, XY } from '../types/map';
 import type { Background, MapContent, MapDocument } from '../types/project';
 import { emptyDocument } from '../features/projects/sampleProject';
 
@@ -91,6 +91,7 @@ export interface EditorState {
   setName: (name: string) => void;
   newProject: () => void;
   openDocument: (doc: MapDocument) => void;
+  resetSheetForOfficialMap: (mapName: string) => void;
   addShape: (shape: MapObject) => void;
   finishPolygon: () => void;
   removeSelected: () => void;
@@ -99,6 +100,7 @@ export interface EditorState {
   nudgeSelected: (dx: number, dy: number) => void;
   toggleHidden: (id: string) => void;
   patchLabel: (id: string, patch: LabelPatch) => void;
+  setSelectedOutline: (outline: Outline) => void;
   setBackground: (bg: Background | null) => void;
   patchBackground: (patch: Partial<Background>) => void;
 }
@@ -252,6 +254,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     get().act((doc) => ({ ...doc, name: next.name, shapes: next.shapes, background: next.background }));
     set({ selectedId: null, draft: null });
   },
+  resetSheetForOfficialMap: (mapName) => {
+    get().act((doc) => ({ ...doc, shapes: [], background: null }));
+    set({ selectedId: null, draft: null });
+    get().showToast(`Sheet cleared for ${mapName}. Map layouts are not added yet.`);
+  },
   addShape: (shape) => {
     get().act((doc) => ({ ...doc, shapes: [...doc.shapes, shape] }));
     set({ selectedId: shape.id });
@@ -300,6 +307,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   /** Live edit for property fields; the field wraps it in checkpoint()/commit() so typing is one undo step. */
   patchLabel: (id, patch) => {
     get().liveEdit((doc) => mapShape(doc, id, (o) => (o.type === 'label' ? { ...o, ...patch } : o)));
+  },
+  setSelectedOutline: (outline) => {
+    const id = get().selectedId;
+    if (id === null) return;
+    get().act((doc) => mapShape(doc, id, (o) => ({ ...o, outline })));
   },
   setBackground: (bg) => get().act((doc) => ({ ...doc, background: bg })),
   patchBackground: (patch) => {

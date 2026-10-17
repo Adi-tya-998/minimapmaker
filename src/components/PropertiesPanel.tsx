@@ -104,6 +104,22 @@ export function PropertiesPanel() {
                 </div>
               </>
             )}
+            <div className="field">
+              <span className="lbl">Outline</span>
+              <div className="row" role="group" aria-label="Selected shape outline">
+                {(['none', 'white', 'black'] as const).map((outline) => (
+                  <button
+                    key={outline}
+                    type="button"
+                    className="btn"
+                    aria-pressed={(sel.outline ?? (sel.type === 'line' || sel.type === 'curve' ? 'white' : sel.type === 'label' ? (sel.tone === 'dark' ? 'white' : 'black') : 'none')) === outline}
+                    onClick={() => st().setSelectedOutline(outline)}
+                  >
+                    {outline === 'none' ? 'None' : outline === 'white' ? 'White' : 'Black'}
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="mono" style={{ margin: '0 0 10px' }}>
               {sel.type === 'label' ? 'Text box ' : `${sel.pts.length} points · `}
               {sizeOf(sel).w.toFixed(1)} × {sizeOf(sel).h.toFixed(1)} units
