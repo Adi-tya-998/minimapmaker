@@ -79,6 +79,8 @@ export interface EditorState {
   toggleGroupingSelection: (id: string) => void;
   groupSelectedLayers: () => void;
   addLayerToGroup: (layerId: string, groupId: string) => void;
+  reorderGroup: (groupId: string, targetId: string, targetType: 'group' | 'layer', placement: 'before' | 'after') => void;
+  reorderLayer: (layerId: string, targetId: string, targetType: 'group' | 'layer', placement: 'before' | 'after') => void;
   ungroupSelectedLayers: () => void;
 
   setViewport: (w: number, h: number) => void;
@@ -212,6 +214,61 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       return { ...doc, shapes: shapes.map((shape) => shape.groupId && counts.get(shape.groupId) === 1 ? { ...shape, groupId: undefined } : shape) };
     });
     get().showToast('Layer added to group. Its stack position is unchanged.');
+  },
+  reorderGroup: (groupId, targetId, targetType, placement) => {
+    const s = get();
+    if (targetType === 'group' && groupId === targetId) return;
+    const sourceMembers = s.doc.shapes.filter((shape) => shape.groupId === groupId);
+    const targetMembers = targetType === 'group'
+      ? s.doc.shapes.filter((shape) => shape.groupId === targetId)
+      : s.doc.shapes.filter((shape) => shape.id === targetId);
+    if (sourceMembers.length === 0 || targetMembers.length === 0 || targetMembers.some((shape) => shape.groupId === groupId)) return;
+    s.act((doc) => {
+      const remaining = doc.shapes.filter((shape) => shape.groupId !== groupId);
+      const targetIndexes = remaining
+        .map((shape, index) => (targetType === 'group' ? shape.groupId === targetId : shape.id === targetId) ? index : -1)
+        .filter((index) => index >= 0);
+      if (targetIndexes.length === 0) return doc;
+      // The document stores layers back-to-front, opposite to the panel's top-down order.
+      const insertionIndex = placement === 'before'
+        ? Math.max(...targetIndexes) + 1
+        : Math.min(...targetIndexes);
+      remaining.splice(insertionIndex, 0, ...sourceMembers);
+      return { ...doc, shapes: remaining };
+    });
+  },
+  reorderLayer: (layerId, targetId, targetType, placement) => {
+    const s = get();
+    const layer = s.doc.shapes.find((shape) => shape.id === layerId);
+    if (!layer || (targetType === 'layer' && layerId === targetId)) return;
+    s.act((doc) => {
+      const remaining = doc.shapes.filter((shape) => shape.id !== layerId);
+      const targetItems = targetType === 'group'
+        ? remaining.filter((shape) => shape.groupId === targetId)
+        : remaining.filter((shape) => shape.id === targetId);
+      if (targetItems.length === 0) return doc;
+      // A drop on the folder header only changes stack position; nesting is explicit
+      // by dropping on a member row or using the group's add-layer control.
+      // Dragging an ungrouped layer past or onto a grouped row must not silently
+      // add it to that group. Use the group's + control for explicit membership.
+      // An already grouped layer can still move between groups by dropping on a
+      // member row, or leave a group by dropping on an ungrouped row.
+      const nextGroupId = targetType === 'group' || !layer.groupId
+        ? layer.groupId
+        : targetItems[0].groupId;
+      const targetIndexes = remaining
+        .map((shape, index) => (targetType === 'group' ? shape.groupId === targetId : shape.id === targetId) ? index : -1)
+        .filter((index) => index >= 0);
+      const insertionIndex = placement === 'before'
+        ? Math.max(...targetIndexes) + 1
+        : Math.min(...targetIndexes);
+      remaining.splice(insertionIndex, 0, { ...layer, groupId: nextGroupId });
+      const counts = new Map<string, number>();
+      remaining.forEach((shape) => {
+        if (shape.groupId) counts.set(shape.groupId, (counts.get(shape.groupId) ?? 0) + 1);
+      });
+      return { ...doc, shapes: remaining.map((shape) => shape.groupId && counts.get(shape.groupId) === 1 ? { ...shape, groupId: undefined } : shape) };
+    });
   },
   ungroupSelectedLayers: () => {
     const s = get();
